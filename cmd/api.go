@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-jwt/jwt/v5"
-	// "github.com/golang-jwt/jwt/v5"
 )
 
 type APIServer struct {
@@ -45,6 +44,14 @@ func (s *APIServer) Run(){
 	r.Get("/create",makeHTTPHandlerFunc(s.handleCreateAccount))
 	r.Post("/login",makeHTTPHandlerFunc(s.handleLogin))
 	r.Get("/account/{id}",withJWTAuth(makeHTTPHandlerFunc(s.handleGetAccount),s.Store))
+
+	//Game Websocket connection
+	hub := newHub()
+	go hub.run()
+	r.Get("/ws/{id}",func(w http.ResponseWriter, r *http.Request) {
+		SetUpWS(hub,w,r,s.Store)
+	})
+	
 	http.ListenAndServe(":3000", r)
 }
 
@@ -153,4 +160,82 @@ func withJWTAuth(handlerFunc http.HandlerFunc,s Storage) http.HandlerFunc {
 
 func permissionDenied(w http.ResponseWriter) {
 	WriteJSON(w,http.StatusForbidden,APIError{Error: "Access Denied"})
+}
+
+// 1. Define an upgrader (you can tweak buffer sizes or CheckOrigin here)
+// var upgrader = websocket.Upgrader{	
+//     CheckOrigin: func(r *http.Request) bool { return true },
+// }
+
+// func serveWs(w http.ResponseWriter, r *http.Request) {
+//     // 2. Upgrade the HTTP connection to WebSocket
+//     conn, err := upgrader.Upgrade(w, r, nil)
+//     if err != nil {
+//         http.Error(w, "Could not open websocket", http.StatusBadRequest)
+//         return
+//     }
+//     defer conn.Close()
+
+//     // 3. Read messages
+//     for {
+//         var msg struct {
+//             X, Y  int    `json:"x,y"`
+//             Color string `json:"color"`
+//         }
+//         // blocks until a JSON message arrives or error
+//         if err := conn.ReadJSON(&msg); err != nil {
+//             break
+//         }
+
+//         // 4. Handle the tile placement...
+//         //    Update DB, broadcast to other clients, etc.
+//     }
+// }
+
+// serveWs handles websocket requests from the peer.
+
+func SetUpWS(hub *Hub, w http.ResponseWriter, r *http.Request, s Storage) {
+    r2, err := handleWSJWT(w, r, s)
+    if err != nil {
+		fmt.Println("What why")
+        return // JWT was invalid or user not found → response already written
+    }
+
+    conn, err := upgrader.Upgrade(w, r2, nil)
+    if err != nil {
+        log.Println("ws upgrade:", err)
+        return
+    }
+
+	account := r2.Context().Value("account").(*Account)
+    client := &Client{hub: hub, conn: conn, send: make(chan UpdateTileReq,256),account: account}
+    hub.register <- client
+    go client.writePump()
+    go client.readPump()
+}
+
+func handleWSJWT(w http.ResponseWriter, r *http.Request, s Storage) (*http.Request, error) {
+    tokenString := r.Header.Get("Jwt")
+    token, err := validateJWT(tokenString)
+    if err != nil || !token.Valid {
+        permissionDenied(w)
+        return nil, fmt.Errorf("invalid JWT")
+    }
+
+    emailID := chi.URLParam(r, "id")
+    account, err := s.GetAccountByName(emailID)
+    if err != nil {
+        WriteJSON(w, http.StatusBadRequest, APIError{Error: "No user exists"})
+        return nil, err
+    }
+
+    claims := token.Claims.(jwt.MapClaims)
+    if account.Email != claims["email"].(string) {
+        WriteJSON(w, http.StatusForbidden, APIError{Error: "Wrong user"})
+        return nil, fmt.Errorf("email mismatch")
+    }
+
+    ctx := context.WithValue(r.Context(), "account", account)
+	fmt.Println("No error")
+    return r.WithContext(ctx), nil
 }
