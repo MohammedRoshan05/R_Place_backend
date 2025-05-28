@@ -18,7 +18,7 @@ type Storage interface{
 	DeleteAccount(string) error
 	GetAccounts() ([]* Account,error)
 	GetAccountByName(string) (*Account,error)
-	Login(LoginAccReq) (error)
+	Login(*LoginAccReq) (error)
 	UpdateTile(string,string,int) (error)
 }
 
@@ -74,8 +74,6 @@ func (s *PostgresDB)CreateAccount(acc *Account) error {
 	(Username,Email,Password,Created_At)
 	values ($1,$2,$3,$4)
 	`
-	fmt.Println("Reach 4")
-
 	_,err := s.db.Exec(query,
 		acc.Username,
 		acc.Email,
@@ -84,9 +82,6 @@ func (s *PostgresDB)CreateAccount(acc *Account) error {
 	if (err != nil){
 		return err
 	}
-	fmt.Println("Username length:", len(acc.Email))
-	fmt.Println("Email length:", len(acc.Password))
-	fmt.Println("Password length:", len(acc.Username))
 	return nil
 }
 
@@ -96,15 +91,15 @@ func (s *PostgresDB) DeleteAccount(username string) error {
 	return err
 }
 
-func (s *PostgresDB) GetAccountByName(username string) (*Account,error) {
-	rows, err := s.db.Query("select * from account where Username = $1", username)
+func (s *PostgresDB) GetAccountByName(email string) (*Account,error) {
+	rows, err := s.db.Query("select * from account where Email = $1", email)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		return scanIntoAccount(rows)
 	}
-	return nil, fmt.Errorf("Account with username %v is not found in db", username)
+	return nil, fmt.Errorf("Account with username %v is not found in db", email)
 }
 
 func (s *PostgresDB) GetAccounts() ([]* Account,error) {
@@ -128,12 +123,12 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 	err := rows.Scan(&account.ID,
 		&account.Username,
 		&account.Email,
+		&account.Password,
 		&account.CreatedAt)
 	return account, err
-
 }
 
-func (s *PostgresDB ) Login(req LoginAccReq) (error) {
+func (s *PostgresDB) Login(req *LoginAccReq) (error) {
 	row := s.db.QueryRow(
         `SELECT password
            FROM account
@@ -146,6 +141,8 @@ func (s *PostgresDB ) Login(req LoginAccReq) (error) {
 	}
 	
 	if err := bcrypt.CompareHashAndPassword([]byte(dbPassword),[]byte(req.Password)); err != nil {
+		fmt.Println("Raw password:", req.Password)
+		fmt.Println("Hashed password from DB:", dbPassword)
 		return err
 	}
 	return nil
