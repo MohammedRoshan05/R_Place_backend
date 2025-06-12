@@ -80,7 +80,7 @@ func (c *Client) readPump(s Storage) {
 
 		fmt.Println("Received message from channel")
 		update := UpdateTileReq{
-			Username: c.account.Username,
+			Username: c.account.Email,
 			TileNo: req.TileNo,
 			Colour: req.Colour,
 			UpdateTime: time.Now().UTC(),

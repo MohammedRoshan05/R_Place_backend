@@ -64,7 +64,7 @@ func (s *APIServer) Run(){
 		SetUpWS(hub,w,r,s.Store)
 	})
 	
-	http.ListenAndServe(":3000", r)
+	http.ListenAndServe(":8000", r)
 }
 
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter,r *http.Request) error {
@@ -218,8 +218,8 @@ func SetUpWS(hub *Hub, w http.ResponseWriter, r *http.Request, s Storage) {
         log.Println("ws upgrade:", err)
         return
     }
-
-	account := r2.Context().Value("account").(*Account)
+	
+	account := r2.Context().Value(accountKey).(*Account)
     client := &Client{hub: hub, conn: conn, send: make(chan UpdateTileReq,256),account: account}
     hub.register <- client
     go client.writePump()
@@ -228,7 +228,7 @@ func SetUpWS(hub *Hub, w http.ResponseWriter, r *http.Request, s Storage) {
 
 func handleWSJWT(w http.ResponseWriter, r *http.Request, s Storage) (*http.Request, error) {
     tokenString := r.Header.Get("Sec-WebSocket-Protocol")
-
+	fmt.Println(tokenString)
     token, err := validateJWT(tokenString)
     if err != nil || !token.Valid {
         permissionDenied(w)
@@ -248,7 +248,7 @@ func handleWSJWT(w http.ResponseWriter, r *http.Request, s Storage) (*http.Reque
         return nil, fmt.Errorf("email mismatch")
     }
 
-    ctx := context.WithValue(r.Context(), "account", account)
+    ctx := context.WithValue(r.Context(), accountKey, account)
 	fmt.Println("No error")
 
 	// 3) configure the upgrader to echo that protocol back

@@ -80,7 +80,7 @@ func (s *PostgresDB) createGridTable() error {
 		values ($1, $2)`
 		for i := 0; i < 100; i++ {
 			_,err = s.db.Exec(query,
-			"","Black")
+			"","black")
 			if(err != nil){
 				return err
 			}
@@ -106,10 +106,10 @@ func (s *PostgresDB) getGrid() ([]*Tile, error) {
 }
 
 func (s *PostgresDB) UpdateTile(update *UpdateTileReq) (error){
-	query := `update Grid 
-	set colour = $1 where id = $2 AND username = $3`
-	res,err := s.db.Exec(query,update.Colour,update.TileNo,update.Username)
-	
+	query := `UPDATE Grid 
+		SET colour = $1, username = $2 
+		WHERE id = $3`	
+	res,err := s.db.Exec(query,update.Colour,update.Username,update.TileNo)
 	n, err := res.RowsAffected()
     if err != nil {
         return err

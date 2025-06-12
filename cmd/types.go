@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"net/http"
 	"sync"
 	"time"
 
@@ -15,6 +16,9 @@ type Account struct{
 	CreatedAt		time.Time		`json:"created_At"`
 }
 
+type ctxKey string
+
+const accountKey ctxKey = "account"
 
 type CreateAccReq struct{
 	Username		string		`json:"username"`
@@ -116,5 +120,8 @@ var (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 

@@ -18,7 +18,7 @@ func main(){
 		log.Fatal(err)
 	}
 	server := &cmd.APIServer{
-		ListenAddr: "3000",
+		ListenAddr: "8000",
 		Store: store,
 	}	
 	server.Run()
