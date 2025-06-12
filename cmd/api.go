@@ -13,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/go-chi/cors"
+
 )
 
 type APIServer struct {
@@ -39,9 +41,19 @@ func (s *APIServer) Run(){
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	// CORS middleware
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"}, // your frontend origins
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Custom-Header"},
+		ExposedHeaders:   []string{"Authorization"},
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any major browser
+	}))
+
 	log.Println("JSON API running on port ",s.ListenAddr)
 
-	r.Get("/create",makeHTTPHandlerFunc(s.handleCreateAccount))
+	r.Post("/create",makeHTTPHandlerFunc(s.handleCreateAccount))
 	r.Post("/login",makeHTTPHandlerFunc(s.handleLogin))
 	r.Get("/account/{id}",withJWTAuth(makeHTTPHandlerFunc(s.handleGetAccount),s.Store))
 
@@ -85,7 +97,7 @@ func (s *APIServer) handleLogin(w http.ResponseWriter,r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	w.Header().Set("jwt",tokenString)
+	w.Header().Set("Authorization",tokenString)
 	return WriteJSON(w,http.StatusOK,tokenString)
 }
 
@@ -99,7 +111,7 @@ func makeHTTPHandlerFunc(f APIFunc) http.HandlerFunc{
 	return func(w http.ResponseWriter,r *http.Request){
 		if err := f(w,r); err != nil{
 			//error response
-			WriteJSON(w,http.StatusBadRequest,APIError{Error: err.Error()})
+			WriteJSON(w,http.StatusBadRequest,APIError{Error: "Invalid Login Credentials"})
 		}
 	}
 }
@@ -132,7 +144,7 @@ func validateJWT(JWT string) (*jwt.Token,error) {
 func withJWTAuth(handlerFunc http.HandlerFunc,s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter,r *http.Request) {
 		fmt.Println("Executing JWT middleware")
-		tokenString := r.Header.Get("Jwt")
+		tokenString := r.Header.Get("Authorization")
 		token,err := validateJWT(tokenString)
 		if err != nil || !token.Valid{
 			permissionDenied(w)
@@ -211,17 +223,18 @@ func SetUpWS(hub *Hub, w http.ResponseWriter, r *http.Request, s Storage) {
     client := &Client{hub: hub, conn: conn, send: make(chan UpdateTileReq,256),account: account}
     hub.register <- client
     go client.writePump()
-    go client.readPump()
+    go client.readPump(s)
 }
 
 func handleWSJWT(w http.ResponseWriter, r *http.Request, s Storage) (*http.Request, error) {
-    tokenString := r.Header.Get("Jwt")
+    tokenString := r.Header.Get("Sec-WebSocket-Protocol")
+
     token, err := validateJWT(tokenString)
     if err != nil || !token.Valid {
         permissionDenied(w)
+		fmt.Println(err)
         return nil, fmt.Errorf("invalid JWT")
     }
-
     emailID := chi.URLParam(r, "id")
     account, err := s.GetAccountByName(emailID)
     if err != nil {
@@ -237,5 +250,9 @@ func handleWSJWT(w http.ResponseWriter, r *http.Request, s Storage) (*http.Reque
 
     ctx := context.WithValue(r.Context(), "account", account)
 	fmt.Println("No error")
+
+	// 3) configure the upgrader to echo that protocol back
+    upgrader.Subprotocols = []string{tokenString}
+
     return r.WithContext(ctx), nil
 }

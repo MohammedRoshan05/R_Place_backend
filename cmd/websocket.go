@@ -8,7 +8,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-
 func newHub() *Hub {
 	return &Hub{
 		broadcast:  make(chan UpdateTileReq),
@@ -49,7 +48,7 @@ func (h *Hub) run() {
 // The application runs readPump in a per-connection goroutine. The application
 // ensures that there is at most one reader on a connection by executing all
 // reads from this goroutine.
-func (c *Client) readPump() {
+func (c *Client) readPump(s Storage) {
 	fmt.Println("Starting readpump")
 	defer func() {
 		c.hub.unregister <- c
@@ -58,6 +57,16 @@ func (c *Client) readPump() {
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	tiles,err := s.getGrid()
+	if(err != nil) {
+		return
+	}
+	updates := tilesToUpdates(tiles)
+
+	for i := range updates {
+		c.send <- updates[i]
+	}
+
 	for {
 		var req PlaceTileReq
 		if err := c.conn.ReadJSON(&req); err != nil {
@@ -84,6 +93,7 @@ func (c *Client) readPump() {
 			// OK to proceed
             c.hub.lastUpdate[req.TileNo] = now
             c.hub.mu.Unlock()
+			s.UpdateTile(&update)
 			c.hub.broadcast <- update
 		}else {
             // too soon, drop it

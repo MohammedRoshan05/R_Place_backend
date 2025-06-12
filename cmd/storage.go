@@ -13,13 +13,14 @@ type PostgresDB struct{
 	db *sql.DB
 }
 
-type Storage interface{
+type Storage interface {
 	CreateAccount(*Account) error
 	DeleteAccount(string) error
 	GetAccounts() ([]* Account,error)
 	GetAccountByName(string) (*Account,error)
 	Login(*LoginAccReq) (error)
-	UpdateTile(string,string,int) (error)
+	UpdateTile(update *UpdateTileReq) (error)
+	getGrid() ([]*Tile, error)
 }
 
 func ConnectDB()(*PostgresDB,error){
@@ -62,11 +63,77 @@ func (s *PostgresDB) createGridTable() error {
 	query := `create table if not exists Grid(
 		id serial primary key,
 		Username varchar(50),
-		Colour varchar(50),
-		LastUpdation timestamp
+		Colour varchar(50)
 	)`
 	_,err := s.db.Exec(query)
-	return err
+	if(err != nil){
+		return err
+	}
+
+	var count int
+    if err := s.db.QueryRow(`SELECT COUNT(*) FROM Grid`).Scan(&count); err != nil {
+        return fmt.Errorf("count rows: %w", err)
+    }
+	if(count == 0){
+		query = `insert into Grid
+		(Username,Colour)
+		values ($1, $2)`
+		for i := 0; i < 100; i++ {
+			_,err = s.db.Exec(query,
+			"","Black")
+			if(err != nil){
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *PostgresDB) getGrid() ([]*Tile, error) {
+	tilesDB,err := s.db.Query(`select * from Grid`)
+	if(err != nil){
+		return nil,err
+	}
+	tiles := []*Tile{}
+	for tilesDB.Next(){
+		tile,err := scanIntoTiles(tilesDB)
+		if(err != nil){ 
+			return nil,err
+		}
+		tiles = append(tiles,tile)
+	}
+	return tiles,nil
+}
+
+func (s *PostgresDB) UpdateTile(update *UpdateTileReq) (error){
+	query := `update Grid 
+	set colour = $1 where id = $2 AND username = $3`
+	res,err := s.db.Exec(query,update.Colour,update.TileNo,update.Username)
+	
+	n, err := res.RowsAffected()
+    if err != nil {
+        return err
+    }
+    if n == 0 {
+        return fmt.Errorf("no grid cell found for id=%d and user=%q", update.TileNo, update.Username)
+    }
+    return nil
+}
+
+func (s *PostgresDB) GetAccounts() ([]* Account,error) {
+	rows, err := s.db.Query("select * from account")
+	if err != nil {
+		return nil, err
+	}
+	accounts := []*Account{}
+	for rows.Next() {
+		account, err := scanIntoAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, account)
+	}
+	return accounts, nil
 }
 
 func (s *PostgresDB)CreateAccount(acc *Account) error {
@@ -102,21 +169,6 @@ func (s *PostgresDB) GetAccountByName(email string) (*Account,error) {
 	return nil, fmt.Errorf("Account with username %v is not found in db", email)
 }
 
-func (s *PostgresDB) GetAccounts() ([]* Account,error) {
-	rows, err := s.db.Query("select * from account")
-	if err != nil {
-		return nil, err
-	}
-	accounts := []*Account{}
-	for rows.Next() {
-		account, err := scanIntoAccount(rows)
-		if err != nil {
-			return nil, err
-		}
-		accounts = append(accounts, account)
-	}
-	return accounts, nil
-}
 
 func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 	account := new(Account)
@@ -126,6 +178,14 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 		&account.Password,
 		&account.CreatedAt)
 	return account, err
+}
+
+func scanIntoTiles(rows *sql.Rows) (*Tile, error) {
+	tile := new(Tile)
+	err := rows.Scan(&tile.TileNo,
+		&tile.Username,
+		&tile.Colour)
+	return tile, err
 }
 
 func (s *PostgresDB) Login(req *LoginAccReq) (error) {
@@ -148,20 +208,7 @@ func (s *PostgresDB) Login(req *LoginAccReq) (error) {
 	return nil
 }
 
-func (s *PostgresDB) UpdateTile(username,colour string,tileID int) (error){
-	query := `update Grid set Colour = $1, LastUpdation = NOW()
-		where id = $2 AND Username = $3`
-	res,err := s.db.Exec(query,colour,tileID,username)
-	
-	n, err := res.RowsAffected()
-    if err != nil {
-        return err
-    }
-    if n == 0 {
-        return fmt.Errorf("no grid cell found for id=%d and user=%q", tileID, username)
-    }
-    return nil
-}
+
 
 func NewAccount( Email,Password,Username string) (*Account, error) {
 	encPW, err := bcrypt.GenerateFromPassword([]byte(Password), bcrypt.DefaultCost)

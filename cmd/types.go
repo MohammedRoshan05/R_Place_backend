@@ -15,6 +15,7 @@ type Account struct{
 	CreatedAt		time.Time		`json:"created_At"`
 }
 
+
 type CreateAccReq struct{
 	Username		string		`json:"username"`
 	Email 			string		`json:"email"`
@@ -26,11 +27,29 @@ type LoginAccReq struct {
 	Password		string		`json:"password"`
 }
 
-type UpdateTileReq struct {
+type Tile struct {
 	TileNo			int			`json:"tile_no"`
-	UpdateTime		time.Time		`json:"update_time"`
 	Username		string		`json:"username"`
 	Colour			string		`json:"colour"`
+}
+type UpdateTileReq struct {
+	TileNo			int			`json:"tile_no"`
+	UpdateTime		time.Time	`json:"update_time"`
+	Username		string		`json:"username"`
+	Colour			string		`json:"colour"`
+}
+
+func tilesToUpdates(tiles []*Tile) []UpdateTileReq {
+    updates := make([]UpdateTileReq, 0, len(tiles))
+    for _, t := range tiles {
+        updates = append(updates, UpdateTileReq{
+            TileNo:     t.TileNo,
+            Username:   t.Username,
+            Colour:     t.Colour,
+            UpdateTime: time.Now().UTC(),
+        })
+    }
+    return updates
 }
  
 // we use the websocekt connection to get username so we dont need that field. 
