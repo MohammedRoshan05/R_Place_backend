@@ -43,12 +43,12 @@ func (s *APIServer) Run(){
 
 	// CORS middleware
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173"}, // your frontend origins
+		AllowedOrigins:   []string{"http://localhost:5173"}, 
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Custom-Header"},
 		ExposedHeaders:   []string{"Authorization"},
 		AllowCredentials: true,
-		MaxAge:           300, // Maximum value not ignored by any major browser
+		MaxAge:           300,
 	}))
 
 	log.Println("JSON API running on port ",s.ListenAddr)
@@ -174,43 +174,11 @@ func permissionDenied(w http.ResponseWriter) {
 	WriteJSON(w,http.StatusForbidden,APIError{Error: "Access Denied"})
 }
 
-// 1. Define an upgrader (you can tweak buffer sizes or CheckOrigin here)
-// var upgrader = websocket.Upgrader{	
-//     CheckOrigin: func(r *http.Request) bool { return true },
-// }
-
-// func serveWs(w http.ResponseWriter, r *http.Request) {
-//     // 2. Upgrade the HTTP connection to WebSocket
-//     conn, err := upgrader.Upgrade(w, r, nil)
-//     if err != nil {
-//         http.Error(w, "Could not open websocket", http.StatusBadRequest)
-//         return
-//     }
-//     defer conn.Close()
-
-//     // 3. Read messages
-//     for {
-//         var msg struct {
-//             X, Y  int    `json:"x,y"`
-//             Color string `json:"color"`
-//         }
-//         // blocks until a JSON message arrives or error
-//         if err := conn.ReadJSON(&msg); err != nil {
-//             break
-//         }
-
-//         // 4. Handle the tile placement...
-//         //    Update DB, broadcast to other clients, etc.
-//     }
-// }
-
-// serveWs handles websocket requests from the peer.
-
 func SetUpWS(hub *Hub, w http.ResponseWriter, r *http.Request, s Storage) {
     r2, err := handleWSJWT(w, r, s)
     if err != nil {
 		fmt.Println("What why")
-        return // JWT was invalid or user not found → response already written
+        return 
     }
 
     conn, err := upgrader.Upgrade(w, r2, nil)
@@ -251,7 +219,6 @@ func handleWSJWT(w http.ResponseWriter, r *http.Request, s Storage) (*http.Reque
     ctx := context.WithValue(r.Context(), accountKey, account)
 	fmt.Println("No error")
 
-	// 3) configure the upgrader to echo that protocol back
     upgrader.Subprotocols = []string{tokenString}
 
     return r.WithContext(ctx), nil
